@@ -14,7 +14,7 @@ Tax statements
 
 Generates data for 5 tables
 -----------
-TRANSACTION  
+TRANSACTIONS  
 POSITIONS  
 ACCOUNT_INFO  
 BALANCES  
