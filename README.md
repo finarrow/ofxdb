@@ -1,5 +1,4 @@
-ofxdb
-=======
+# ofxdb
 
 DB Generator for OFX Financial Statement Data
 

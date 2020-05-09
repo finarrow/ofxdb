@@ -2,9 +2,9 @@
 
 import os
 import datetime
-import pandas as pd
 from decimal import Decimal
 
+import pandas as pd
 from ofxtools.Parser import OFXTree
 import ofxtools.models
 
