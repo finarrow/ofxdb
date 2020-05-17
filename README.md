@@ -1,6 +1,8 @@
 # OFXDB
 
-Database Generator for OFX Financial Statement Data
+![Finarrow](https://github.com/finarrow/finarrow/blob/master/docs/media/finarrow_logo.png)
+
+Database Generator for OFX Financial Statement Data, by [Finarrow].
 
 ## What is it?
 `ofxdb` is a Python package providing ETL infrastructure needed 
@@ -13,11 +15,11 @@ your account history across any financial institution and make the
 data available for you to analyze.
 
 ## Main features
-These are few things that ofxfdb does in its current state:
+These are few things that `ofxfdb` does in its current state:
 
  - Parse `ofxtools` account config file
  - Retrieve ofx files for all accounts in the `ofxtools` account config
- - Transform ofx files into csv files and save to disk
+ - Transform `ofxtools` account info and statement objects into csv files and save to disk
 
 Current support:  
 Account information  
@@ -97,14 +99,16 @@ request a new feature please [open an issue] against `ofxdb` on GitHub.
 [MIT](LICENSE)
 
 <!-- Named links -->
+[Finarrow]: https://github.com/finarrow
 [open an issue]: https://github.com/finarrow/ofxdb/issues
 [Finarrow community Slack]: https://join.slack.com/t/finarrow/shared_invite/zt-edx8c7hh-ALm_vWUpGpsAhwEjzKkWXg
 [ofxtools]: https://github.com/csingley/ofxtools
 [pandas]: https://pandas.pydata.org/
 [keyring]: https://pypi.org/project/keyring/
 [Python package index]: https://pypi.org/project/ofxdb
-[table guide]: https://github.com/finarrow/ofxdb/blob/master/doc/TABLES.md
+[tables guide]: https://github.com/finarrow/ofxdb/blob/master/doc/TABLES.md
 [table samples]: https://github.com/finarrow/ofxdb/blob/master/doc/table_samples/
 [ofx]: https://www.ofx.net/
 [ofxtools]: https://github.com/csingley/ofxtools
 [ofxtools documentation]: https://ofxtools.readthedocs.io/en/latest/
+[column definitions]: https://github.com/finarrow/ofxdb/blob/master/doc/COLUMN_DEFINITIONS.md
