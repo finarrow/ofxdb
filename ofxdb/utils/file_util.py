@@ -10,11 +10,11 @@ Constants
 """
 
 TABLES = {
-    'transactions': 'TRANSACTIONS.csv',
-    'balances': 'BALANCES.csv',
-    'securities': 'SECURITIES.csv',
-    'acct_info': 'ACCT_INFO.csv',
-    'positions': 'POSITIONS.csv',
+    'transactions': 'transactions.csv',
+    'balances': 'balances.csv',
+    'securities': 'securities.csv',
+    'acct_info': 'account_info.csv',
+    'positions': 'positions.csv',
 }
 
 """
