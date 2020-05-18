@@ -26,5 +26,5 @@ setuptools.setup(
         "Topic :: Office/Business :: Financial :: Investment"
     ],
     python_requires=">=3.7",
-    install_requires=["ofxtools>=0.8.20", "pandas>=1.0.1"],
+    install_requires=["ofxtools>=0.8.20", "pandas>=1.0.1", "keyring>=21.1.0"],
 )
