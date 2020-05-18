@@ -47,6 +47,9 @@ By design `ofxdb` should work well for any broker that you can connect to with `
 for any security types supported by the ofx protocol. 
 If you encounter any issues, please [open an issue] against `ofxdb` on GitHub.
 
+In its current version, `ofxdb` only works on linux and linux-based systems (including OSX). 
+Support for Windows is in the scope of the project and will come in a future version.
+
 ## Where to get it
 The source code is currently hosted on GitHub at:
 https://github.com/finarrow/ofxbd
