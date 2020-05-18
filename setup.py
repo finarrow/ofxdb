@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="ofxdb",
-    version="0.0.1",
+    version="0.0.2",
     author="Ricardo Rosales",
     author_email="rrosales1028@gmail.com",
     description="DB Generator for OFX Financial Statement Data",
