@@ -1,239 +1,327 @@
 #!python
+"""OFX file aggregation module.
 
+Retrieves the latest OFX files for all institutions and appends them to the corresponding table.
+
+Loads data into 5 tables (see docs for descriptions):
+account_info.csv
+balances.csv
+positions.csv
+securities.csv
+transactions.csv
+"""
 import os
 import datetime
 from decimal import Decimal
+from typing import Union, List
 
 import pandas as pd
 from ofxtools.Parser import OFXTree
-import ofxtools.models
+from ofxtools.models import Aggregate, SubAggregate
 
 from ofxdb.data import accounts
 from ofxdb.utils import file_util
 from ofxdb import cfg
 
-# ToDo: imply xml.ETree attributes from the class
-ETREE_ATTRS = [
-    'elements',
-    'listitems',
-    'optionalMutexes',
-    'requiredMutexes',
-    'spec',
-    'spec_no_listitems',
-    'subaggregates',
-    'unsupported'
-]
+# -----------------------------------------------------------------------------
+# -- Module-wide object definitions
+# -----------------------------------------------------------------------------
+_OFXToolsBaseModel = Union[Aggregate, SubAggregate]
+_OFXToolsElement = Union[_OFXToolsBaseModel, str, Decimal, datetime.datetime, None]
+
+# -----------------------------------------------------------------------------
+# -- ofxtools model parsing helper methods
+# -----------------------------------------------------------------------------
 
 
-# TODO: Document the need for this
-def get_attr_mask(node, a):
+def getattr_mask(element: _OFXToolsBaseModel, attribute: str) -> Union[_OFXToolsElement, None]:
+    """Mask for getattr method.
+
+    Used to handle errors that are thrown when getattr fails due to encountering an ofxtools model
+    that has no length. This can happen for example when there exists an account that was opened but
+    never had transactions.
+
+    For example, a KeyError thrown for the following elements:
+    <INVTRANLIST dtstart='2018-05-25 18:01:21+00:00' dtend='2020-05-22 00:00:00+00:00' len=0>
+    <INVPOSLIST()>
+
+    Args:
+        element: ofxtools model
+        attribute: ofxtools model class attribute string
+
+    Returns:
+        An ofxtools element. Can be a new element or a leaf of the xml structure.
+    """
     try:
-        return getattr(node, a)
-    except Exception as err:
-        print(err)
+        return getattr(element, attribute)
+    except KeyError as _:
         return None
 
 
-def get_ofx_attrs(node):
-    """
-    Get object attributes excluding callable attributes, attributes that are inherited from the xml.ETree class, and
-    hidden class attributes
-    :param node: ofxtools model class
-    :type node: ofxtools.models.base.Aggregate, ofxtools.models.base.SubAggregate
-    :return: list of attribute strings
-    :rtype: list
+def get_ofx_attrs(element: _OFXToolsBaseModel) -> List[str]:
+    """Get ofxtools object attributes.
+
+    Excludes callable attributes, attributes that are inherited from the Aggregate class, and
+    any private class attributes.
+
+    Args:
+        element: ofxtools model
+
+    Returns:
+        List of attribute strings
     """
     return [
-        a for a in dir(node) if not callable(get_attr_mask(node, a)) and not a.startswith('_') and a not in ETREE_ATTRS
+        attribute for attribute in dir(element)
+        if not callable(getattr_mask(element, attribute)) and
+        not attribute.startswith('_') and
+        attribute not in dir(Aggregate)
     ]
 
 
-def is_ofx_obj(node):
+def is_ofx_model(element: _OFXToolsElement) -> bool:
+    """Check if element is an ofxtools model.
+
+    This is a wrapper for isinstance that accounts for _OFXToolsBaseModel being a Union generic
+    type.
+
+    Args:
+        element: ofxtools element tree element.
+
+    Returns:
+        True or False
     """
-    Check if node is an ofxtools object
-    :param node: ofxtools tree node
-    :type node: object
-    :return: is ofx object
-    :rtype: bool
-    """
-    if isinstance(node, ofxtools.models.base.Aggregate):
-        return True
-    if isinstance(node, ofxtools.models.base.SubAggregate):
+    if isinstance(element, _OFXToolsBaseModel.__args__):
         return True
     return False
 
 
-def append_attrs(node, record, label):
+# -----------------------------------------------------------------------------
+# -- ofxtools model record generation helper methods
+# -----------------------------------------------------------------------------
+
+
+def append_model_records(element: _OFXToolsElement, record: dict, key: str) -> dict:
+    """Recursively append OFX model attributes -> value pair to record dictionary.
+
+    Args:
+        element: ofxtools element tree element.
+        record: ofxtools model attribute -> value dictionary.
+        key: Record key for element.
+
+    Returns:
+        Appended record dictionary.
+
+    Raises:
+        KeyError: Encountered duplicate key (should not occur by OFX spec)
+        ValueError: Encountered unrecognized type for leaf
     """
-    Append OFX object attributes to record dict
-    :param node: ofxtools tree node
-    :type node: object
-    :param record: ofxtools model attribute object record dict
-    :type record: dict
-    :param label: record entry label for given node
-    :type label: str
-    :return: record with appended value(s) for node attributes
-    :rtype: dict
-    """
-    if is_ofx_obj(node):
-        for sub_node in get_ofx_attrs(node):
-            new_node = get_attr_mask(node, sub_node)
-            if new_node is not None:
-                record = append_attrs(node=new_node, record=record, label=sub_node)
+    if is_ofx_model(element):
+        for sub_element in get_ofx_attrs(element):
+            new_element = getattr_mask(element, sub_element)
+            if new_element is not None:
+                record = append_model_records(element=new_element, record=record, key=sub_element)
     else:
-        if label in record:
-            raise ValueError(
-                'Label ({label}) for node ({node})already in record\n{record}'.format(
-                    label=label, node=node, record=record
-                )
-            )
-        if isinstance(node, Decimal):
-            record[label] = float(node)
-        elif isinstance(node, str):
-            record[label] = str(node)
-        elif isinstance(node, datetime.datetime):
-            record[label] = node.replace(tzinfo=datetime.timezone.utc)
-        elif node is None:
+        if key in record:
+            raise KeyError(f'Key ({key}) for element ({element}) already in record\n{record}')
+        if isinstance(element, Decimal):
+            record[key] = float(element)
+        elif isinstance(element, str):
+            record[key] = str(element)
+        elif isinstance(element, datetime.datetime):
+            record[key] = element.replace(tzinfo=cfg.OFX_TIMEZONE)
+        elif element is None:
             return record
         else:
-            raise ValueError('Unknown type ({cur_type}) encountered.'.format(cur_type=type(node)))
+            raise ValueError(f'Unknown type ({type(element)}) encountered.')
 
     return record
 
 
-def get_obj_record(ofx_obj, acct_info):
-    """
-    Get record from OFX object attributes
-    :param ofx_obj: ofxtools model class
-    :type ofx_obj: ofxtools.models.base.Aggregate, ofxtools.models.base.SubAggregate
-    :param acct_info: account information (date, datetime, server, user, acctid)
-    :type acct_info: dict
-    :return: record with appended attribute key->value pairs
-    :rtype: dict
+def get_model_record(ofx_model: _OFXToolsBaseModel, acct_info: dict) -> dict:
+    """Get record from OFX model attributes.
+
+    Args:
+        ofx_model: ofxtools model.
+        acct_info: Account information dict (date, datetime, server, user, acctid).
+
+    Returns:
+        Model record with attribute key -> value pairs. All records seeded with account information.
     """
     record = acct_info.copy()
-    for obj_attr in get_ofx_attrs(ofx_obj):
-        node = get_attr_mask(ofx_obj, obj_attr)
-        if node is not None:
-            record = append_attrs(node=node, record=record, label=obj_attr)
+    for ofx_attr in get_ofx_attrs(ofx_model):
+        element = getattr_mask(ofx_model, ofx_attr)
+        if element is not None:
+            record = append_model_records(element=element, record=record, key=ofx_attr)
     return record
 
 
-def get_list_records(ofx_objs, acct_info):
+def get_list_records(ofx_models: List[_OFXToolsBaseModel], acct_info: dict) -> List[dict]:
+    """Get records from list of OFX models.
+
+    Args:
+        ofx_models: List of ofxtools models.
+        acct_info: Account information dict (date, datetime, server, user, acctid).
+
+    Returns:
+        List of model records with attribute key -> value pairs.
     """
-    Get records from list of OFX objects
-    :param ofx_objs: list of ofxtools model classes
-    :type ofx_objs: list
-    :param acct_info: account information (date, datetime, server, user, acctid)
-    :type acct_info: dict
-    :return: list of records with appended attribute key->value pairs
-    :rtype: list
-    """
-    records = []
-    for obj in ofx_objs:
-        records.append(get_obj_record(obj, acct_info))
-    return records
+    return [get_model_record(model, acct_info) for model in ofx_models]
 
 
-def get_records(ofx_obj, acct_info):
-    """
-    Get record from OFX object attributes
-    :param ofx_obj: ofxtools model class or list of ofxtools model classes
-    :type ofx_obj: list, ofxtools.models.base.Aggregate, ofxtools.models.base.SubAggregate
-    :param acct_info: account information (date, datetime, server, user, acctid)
-    :type acct_info: dict
-    :return: list of records with appended attribute key->value pairs
-    :rtype: list
-    """
-    if len(ofx_obj):
-        return get_list_records(ofx_objs=ofx_obj, acct_info=acct_info)
-    else:
-        print('is not list')
-        return [get_obj_record(ofx_obj=ofx_obj, acct_info=acct_info)]
+# -----------------------------------------------------------------------------
+# -- Model processing helper methods
+# -----------------------------------------------------------------------------
+_INDEX_COL = 'datetime'
+_OFX_ACCTID = 'acctid'
 
 
-def write_records(records, file_name):
+def generate_records(
+        ofx_model: Union[_OFXToolsBaseModel, List[_OFXToolsBaseModel]],
+        acct_info: dict) -> List[dict]:
+    """Get records from OFX object attributes.
+
+    This is a wrapper for get_list_records to handle generating one or multiple records.
+
+    Args:
+        ofx_model: ofxtools model or list of ofxtools models.
+        acct_info: Account information dict (date, datetime, server, user, acctid).
+
+    Returns:
+        A list of records with model attribute key -> value pairs.
     """
-    Write records to disk (append to existing table)
-    :param records: list of records
-    :type records: list
-    :param file_name: destination file name
-    :type file_name: str
-    :return: None
+    if len(ofx_model) > 0:
+        # We check for len > 0 here to cover the case where ofx_model is a list of models and the
+        # case where ofx_model is a generator of models (e.g. transactions, positions, etc.).
+        return get_list_records(ofx_models=ofx_model, acct_info=acct_info)
+    return [get_model_record(ofx_model=ofx_model, acct_info=acct_info)]
+
+
+def write_records(records: List[dict], file_name: str) -> None:
+    """Write records to disk, appending to existing table.
+
+    Args:
+        records: List of record dicts.
+        file_name: Destination file name.
+
+    Returns:
+        None
     """
-    new_df = pd.DataFrame(records).set_index('date')
+    # TODO (ricrosales): This should replace data for given account instead of just appending
+    new_df = pd.DataFrame(records).set_index(_INDEX_COL)
     if os.path.exists(file_name):
-        df = pd.read_csv(file_name, index_col='date')
-        df = df.append(new_df)
+        file_df = pd.read_csv(file_name, index_col=_INDEX_COL)
+        file_df = file_df.append(new_df)
     else:
-        df = new_df
-    print('Writing: {file_name}'.format(file_name=file_name))
-    df.to_csv(file_name)
-    return None
+        file_df = new_df
+    print(f'Writing: {file_name}')
+    file_df.to_csv(file_name)
 
 
-def process_ofx_obj(ofx_obj, acct_info, table, dbdir):
+def process_ofx_model(
+        ofx_model: Union[_OFXToolsBaseModel, List[_OFXToolsBaseModel]],
+        acct_info: dict,
+        table: str,
+        db_dir: str) -> None:
+    """Process OFX model.
+
+    1) Generate records from ofxtools model.
+    2) Get destination file.
+    3) Write records to disk.
+
+    Args:
+        ofx_model: ofxtools model or list of ofxtools models.
+        acct_info: Account information dict (date, datetime, server, user, acctid).
+        table: Destination table name for given model.
+        db_dir: Database base directory path.
+
+    Returns:
+        None
     """
-    Process OFX object. 1) Get records from object. 2) Get destination file. 3) Write records to disk.
-    :param ofx_obj: ofxtools model class or list of ofxtools model classes
-    :type ofx_obj: list, ofxtools.models.base.Aggregate, ofxtools.models.base.SubAggregate
-    :param acct_info: account information (date, datetime, server, user, acctid)
-    :type acct_info: dict
-    :param table: table name
-    :type table: str
-    :param dbdir: database directory
-    :type dbdir: str
-    :return: None
-    """
-    records = get_records(ofx_obj=ofx_obj, acct_info=acct_info)
+    records = generate_records(ofx_model=ofx_model, acct_info=acct_info)
     if records:
-        file_name = file_util.get_table_file(table, dbdir=dbdir)
+        file_name = file_util.get_table_file(table, db_dir=db_dir)
         write_records(records, file_name)
 
-    return None
+
+def process_statement_model(stmt: _OFXToolsBaseModel, acct_info: dict, db_dir: str) -> None:
+    """Process ofxtools statement model.
+
+    1) Generate records from ofxtools model.
+    2) Get destination file.
+    3) Write records to disk.
+    4) Process associated transactions, positions, and balances
+
+    Args:
+        stmt:
+        acct_info:
+        db_dir:
+
+    Returns:
+        None
+
+    Raises:
+        Exception: Encountered account_info record with multiple entries. This is not supposed to
+                   occur based on OFX spec. Multiple accounts being supported would break assumption
+                   made on seeding all model records with account info.
+    """
+    # acct_info should yield only one record but get records returns list for ease downstream
+    acct_info_records = generate_records(ofx_model=stmt.account, acct_info=acct_info)
+    if len(acct_info_records) > 1:
+        raise Exception(
+            f'Expected generate_records to yield 1 record for acct_info, '
+            f'but got:\n{acct_info_records}'
+        )
+    cur_acct_info = acct_info_records[0]
+
+    if _OFX_ACCTID not in cur_acct_info:
+        raise ValueError(f'Statement account info did not contain acctid.\n{stmt}')
+    acct_info_file = file_util.get_table_file('acct_info', db_dir=db_dir)
+    write_records(acct_info_records, acct_info_file)
+
+    statement_table_map = [
+        (stmt.transactions, 'transactions'),
+        (stmt.positions, 'positions'),
+        (stmt.balances.ballist, 'balances')
+    ]
+    for ofx_model, table in statement_table_map:
+        process_ofx_model(ofx_model=ofx_model, acct_info=cur_acct_info, table=table, db_dir=db_dir)
 
 
-def agg(dbdir):
+# -----------------------------------------------------------------------------
+# -- OFX data aggregation method
+# -----------------------------------------------------------------------------
+_STMT_FOLDER = 'stmt'
+
+
+def agg(db_dir: str = cfg.DB_DIR) -> None:
+    """Aggregate current ofx files to the database.
+
+    Args:
+        db_dir:  Database base directory path.
+
+    Returns:
+        None
+    """
     parser = OFXTree()
     user_cfg = accounts.get_user_cfg()
     for server, server_config in user_cfg.items():
-        if server != 'DEFAULT':
-            user = server_config['user']
-            file_name = '{dbdir}/stmt/current_{server}_{user}.ofx'.format(dbdir=dbdir, server=server, user=user)
-            with open(file_name, 'rb') as f:
-                parser.parse(f)
+        if server != cfg.OFXGET_DEFAULT_SERVER:
+            user = server_config[cfg.OFXGET_CFG_USER_LABEL]
+            file_name = f'{db_dir}/{_STMT_FOLDER}/' \
+                        f'{cfg.CURRENT_PREFIX}_{server}_{user}.{cfg.OFX_EXTENSION}'
+            with open(file_name, 'rb') as ofx_file:
+                parser.parse(ofx_file)
             ofx = parser.convert()
-            statements = ofx.statements
-            dt = datetime.datetime.today()
-            dt = dt.replace(tzinfo=datetime.timezone.utc)
-            date = dt.date()
-            acct_info = {'date': date, 'datetime': dt, 'server': server, 'user': user}
-            for stmt in statements:
-                # NOTE: acct_info yields only one record but get records returns list for ease handling downstream
-                acct_info_records = get_records(ofx_obj=stmt.account, acct_info=acct_info)
-                if len(acct_info_records) > 1:
-                    raise Exception(
-                        'Expected get_records to yield 1 record for acct_info, but got:\n{records}'.format(
-                            records=acct_info_records
-                        )
-                    )
-                cur_acct_info = acct_info_records[0]
-                if 'acctid' not in cur_acct_info:
-                    raise ValueError('Statement account info did not contain acctid.\n{stmt}'.format(stmt=stmt))
-                acct_info_file = file_util.get_table_file('acct_info', dbdir=dbdir)
-                write_records(acct_info_records, acct_info_file)
-
-                procs = [
-                    ('transactions', stmt.transactions),
-                    ('positions', stmt.positions),
-                    ('balances', stmt.balances.ballist)
-                ]
-                for table, ofx_obj in procs:
-                    process_ofx_obj(ofx_obj=ofx_obj, acct_info=cur_acct_info, table=table, dbdir=dbdir)
-
-            process_ofx_obj(ofx_obj=ofx.securities, acct_info=acct_info, table='securities', dbdir=dbdir)
+            agg_datetime = datetime.datetime.today().replace(tzinfo=cfg.OFX_TIMEZONE)
+            agg_date = agg_datetime.date()
+            acct_info = {'datetime': agg_datetime, 'date': agg_date, 'server': server, 'user': user}
+            for stmt in ofx.statements:
+                process_statement_model(stmt=stmt, acct_info=acct_info, db_dir=db_dir)
+            process_ofx_model(
+                ofx_model=ofx.securities, acct_info=acct_info, table='securities', db_dir=db_dir
+            )
 
 
 if __name__ == '__main__':
 
-    agg(cfg.DB_DIR)
+    agg()

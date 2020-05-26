@@ -1,14 +1,13 @@
 #!python
-
+"""Library of file utility methods."""
 import os
 import pathlib
 
 from ofxdb import cfg
 
-"""
-Constants
-"""
-
+# -----------------------------------------------------------------------------
+# -- Table file methods
+# -----------------------------------------------------------------------------
 TABLES = {
     'transactions': 'transactions.csv',
     'balances': 'balances.csv',
@@ -17,23 +16,30 @@ TABLES = {
     'positions': 'positions.csv',
 }
 
-"""
-File location functions
-"""
 
+def get_table_file(table: str, db_dir: str = cfg.DB_DIR) -> str:
+    """Retrieve full path for a given table.
 
-def get_table_file(table, dbdir=cfg.DB_DIR):
-    base = '{dbdir}/tables'.format(dbdir=dbdir)
-    if not os.path.exists(base):
-        os.makedirs(base)
+    Args:
+        table: Table name for file to retrieve.
+        db_dir: Database base directory path.
+
+    Returns:
+        A string representing full path for location of table on the disk.
+
+    Raises:
+        ValueError: Encountered table that was not supported (in TABLES).
+    """
+    base_path = f'{db_dir}/tables'
+    if not os.path.exists(base_path):
+        os.makedirs(base_path)
     table = table.lower()
     if table not in TABLES:
         raise ValueError(
-            'Table ({table}) not supported. Try: {tables} or add support in {cur_file}.'.format(
-                table=table, tables=list(TABLES.keys()), cur_file=pathlib.Path(__file__).absolute()
-            )
+            f'Table ({table}) not supported. Try: {list(TABLES.keys())} or add support in '
+            f'{pathlib.Path(__file__).absolute()}.'
         )
-    table_file = '{base}/{table}'.format(base=base, table=TABLES.get(table))
+    table_file = f'{base_path}/{TABLES.get(table)}'
     return table_file
 
 

@@ -1,31 +1,39 @@
-import configparser
-from typing import List
+"""OFX account module.
 
-import ofxtools.config
+Contains methods used to retrieve account details from the ofxtools generated ofxget.cfg file.
+"""
+from typing import List
+from configparser import ConfigParser
+
+from ofxdb import cfg
+
+# -----------------------------------------------------------------------------
+# -- User config parsing class
+# -----------------------------------------------------------------------------
 
 
 def convert_list(string: str) -> List[str]:
-    """
-    Deserialize INI representation to a Python list
-    """
+    """Convert INI list representation to a Python list."""
     return [sub.strip() for sub in string.split(",")]
 
 
-class UserConfig(configparser.ConfigParser):
+class UserConfig(ConfigParser):
+    """User config class. Extends ConfigParser with converter for INI list representation."""
     def __init__(self, *args, **kwargs):
         kwargs["converters"] = {"list": convert_list}
         super().__init__(*args, **kwargs)
 
 
-def get_user_cfg():
+# -----------------------------------------------------------------------------
+# -- User config parsing method
+# -----------------------------------------------------------------------------
+
+
+def get_user_cfg() -> UserConfig:
+    """Retrieve user config from ofxget.cfg file."""
     user_cfg = UserConfig()
-    ofx_config_file = ofxtools.config.USERCONFIGDIR / 'ofxget.cfg'
-    user_cfg.read(ofx_config_file)
+    user_cfg.read(cfg.OFXGET_CFG)
     return user_cfg
-
-
-def setup():
-    pass
 
 
 if __name__ == '__main__':
