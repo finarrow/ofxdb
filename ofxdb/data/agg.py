@@ -3,7 +3,7 @@
 
 Retrieves the latest OFX files for all institutions and appends them to the corresponding table.
 
-Loads data into 5 tables (see docs for descriptions):
+Loads data into 5 aux_tables (see docs for descriptions):
 account_info.csv
 balances.csv
 positions.csv
@@ -213,7 +213,6 @@ def write_records(records: List[dict], file_name: str) -> None:
         file_df = file_df.append(new_df)
     else:
         file_df = new_df
-    print(f'Writing: {file_name}')
     file_df.to_csv(file_name)
 
 
@@ -239,7 +238,7 @@ def process_ofx_model(
     """
     records = generate_records(ofx_model=ofx_model, acct_info=acct_info)
     if records:
-        file_name = file_util.get_table_file(table, db_dir=db_dir)
+        file_name = file_util.table_file(table, db_dir=db_dir)
         write_records(records, file_name)
 
 
@@ -275,7 +274,7 @@ def process_statement_model(stmt: _OFXToolsBaseModel, acct_info: dict, db_dir: s
 
     if _OFX_ACCTID not in cur_acct_info:
         raise ValueError(f'Statement account info did not contain acctid.\n{stmt}')
-    acct_info_file = file_util.get_table_file('acct_info', db_dir=db_dir)
+    acct_info_file = file_util.table_file('acct_info', db_dir=db_dir)
     write_records(acct_info_records, acct_info_file)
 
     statement_table_map = [
