@@ -1,6 +1,8 @@
 """Package-wide configuration file"""
 import os
+import pathlib
 import datetime
+
 from ofxtools import config as ofxtools_config
 
 # -----------------------------------------------------------------------------
@@ -22,3 +24,8 @@ OFXGET_DEFAULT_SERVER = 'DEFAULT'
 # -- datetime definitions
 # -----------------------------------------------------------------------------
 OFX_TIMEZONE = datetime.timezone.utc
+
+# -----------------------------------------------------------------------------
+# -- System table definitions
+# -----------------------------------------------------------------------------
+AUX_TABLES_DIR = f'{os.path.dirname(pathlib.Path(__file__).absolute())}/aux_tables'
