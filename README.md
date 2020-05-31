@@ -20,8 +20,81 @@ These are few things that `ofxfdb` does in its current state:
  - Parse `ofxtools` account config file
  - Retrieve ofx files for all accounts in the `ofxtools` account config
  - Transform `ofxtools` account info and statement objects into csv files and save to disk
+ - Aggregate data into various views
 
-Current support:  
+## Where to get it
+The source code is currently hosted on GitHub at:
+https://github.com/finarrow/ofxbd
+
+Binary installer for the latest released version is available at the 
+[Python package index].
+
+```sh
+pip install ofxdb
+```
+
+## Dependencies
+- [ofxtools]
+- [pandas]
+- [keyring]
+- [tabulate]
+
+## Getting started
+
+Set up your account credentials in your system keyring using the 
+`ofxtools` command line tool `ofxget`. Do this for all accounts you would 
+like to aggregate data for. You will be prompted in the command line to 
+enter your password.
+
+```sh
+ofxget acctinfo <server_nickname> -u <your_username> --write --savepass
+```
+
+You can get a list of available server nicknames as follows:
+
+```sh
+ofxget list
+```
+Check out the [ofxtools documentation] if you have any issues using `ofxget`.  
+
+Use the generate script to build the tables.
+
+```sh
+python ofxdb/data/generate.py
+```
+
+Use the view script to generate views on the data. 
+Only the risk view is supported at the moment. 
+If you have an idea for a new view [open an issue] against `ofxdb` on GitHub 
+
+```sh
+python ofxdb/view.py -view risk
+```
+
+| Date          |   YYYY-MM-DD |
+|---------------|--------------|
+| MV($)         |   100,000.00 |
+| GrossMV($)    |   150,000.00 |
+| BAGMV($)      |   120,000.00 |
+| NetMV($)      |    90,000.00 |
+| NetGrossMV($) |   140,000.00 |
+| Gross(%)      |       150.00 |
+| BAG(%)        |       120.00 |
+| NetMV(%)      |        90.00 |
+| NetGrossMV(%) |       140.00 |
+
+Note: the risk view relies on data in the [exposures] auxiliary table. 
+For the time being this is manually generated and supports most liquid US listed
+ETFs (including levered ETFs).
+Feel free to open a PR to add support for more securities.
+
+Use -h to see available views and modifiers.
+
+```sh
+python ofxdb/view.py -h
+```
+
+## Current support
 Account information  
 Investment statements
 
@@ -50,46 +123,6 @@ If you encounter any issues, please [open an issue] against `ofxdb` on GitHub.
 In its current version, `ofxdb` only works on linux and linux-based systems (including OSX). 
 Support for Windows is in the scope of the project and will come in a future version.
 
-## Where to get it
-The source code is currently hosted on GitHub at:
-https://github.com/finarrow/ofxbd
-
-Binary installer for the latest released version is available at the 
-[Python package index].
-
-```sh
-pip install ofxdb
-```
-
-## Dependencies
-- [ofxtools]
-- [pandas]
-- [keyring]
-
-## Getting started
-
-Set up your account credentials in your system keyring using the 
-`ofxtools` command line tool `ofxget`. Do this for all accounts you would 
-like to aggregate data for. You will be prompted in the command line to 
-enter your password.
-
-```sh
-ofxget acctinfo <server_nickname> -u <your_username> --write --savepass
-```
-
-You can get a list of available server nicknames as follows:
-
-```sh
-ofxget list
-```
-
-Use the generate script to build the tables.
-
-```sh
-python ofxdb/data/generate.py
-```
-
-Check out the [ofxtools documentation] if you have any issues using `ofxget`.
 
 ## Getting involved
 
@@ -115,3 +148,5 @@ request a new feature please [open an issue] against `ofxdb` on GitHub.
 [ofxtools]: https://github.com/csingley/ofxtools
 [ofxtools documentation]: https://ofxtools.readthedocs.io/en/latest/
 [column definitions]: https://github.com/finarrow/ofxdb/blob/master/doc/COLUMN_DEFINITIONS.md
+[exposures]: https://github.com/finarrow/ofxdb/blob/master/ofxdb/aux_tables/exposures.csv
+[tabulate]: https://pypi.org/project/tabulate/
